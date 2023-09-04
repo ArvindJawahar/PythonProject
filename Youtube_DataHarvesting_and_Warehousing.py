@@ -314,26 +314,28 @@ with tab3:
         i = collections1.find_one({"channel_name": user_input}, {'_id': 0})
         if i:
             # Convert subscribers, views, and total_videos to integers and  published_At to a MySQL DATETIME format
-            subscribers = i["subscribers"]
-            views = i["views"]
-            total_videos = i["total_videos"]
+            subscribers = int(i["subscribers"])
+            views = int(i["views"])
+            total_videos = int(i["total_videos"])
             published_at_iso = i["published_At"]
 
-            # Strip milliseconds, if present
+            # Check if the timestamp includes milliseconds
             if "." in published_at_iso:
-                published_at_iso = published_at_iso.split(".")[0]
+                datetime_format = "%Y-%m-%dT%H:%M:%S.%fZ"
+            else:
+                datetime_format = "%Y-%m-%dT%H:%M:%SZ"
 
-            published_at = datetime.strptime(published_at_iso, "%Y-%m-%dT%H:%M:%SZ")
+            published_at = datetime.strptime(published_at_iso, datetime_format)
 
-        data_tuple = (i["channel_id"],
-                    i["channel_name"],
-                    i["channel_playlistid"],
-                    subscribers,
-                    views,
-                    total_videos,
-                    i["description"],
-                    i["country"],
-                    published_at)
+            data_tuple = (i["channel_id"],
+                          i["channel_name"],
+                          i["channel_playlistid"],
+                          subscribers,
+                          views,
+                          total_videos,
+                          i["description"],
+                          i["country"],
+                          published_at)
         try:
             cursor.execute(query1, data_tuple)
             mydb.commit()
@@ -380,10 +382,8 @@ with tab3:
                 cursor.execute(query2, data_tuple)
                 mydb.commit()
             except Exception as e:
-                if "Duplicate entry" in str(e):
-                    st.write("Duplicate entry: The data for this channel already exists in the database.")
-                else:
-                    st.warning(f"An error occurred while inserting into 'videos_details': {str(e)}")
+
+                st.warning(f"An error occurred while inserting into 'videos_details': {str(e)}")
 
     # Function to insert data into the 'comments_details' table
     def insert_into_comments_details():
@@ -412,10 +412,8 @@ with tab3:
                     cursor.execute(query3, data_tuple)
                     mydb.commit()
                 except Exception as e:
-                    if "Duplicate entry" in str(e):
-                        st.write("Duplicate entry: The data for this channel already exists in the database.")
-                    else:
-                        st.warning(f"An error occurred while inserting into 'comments_details': {str(e)}")
+
+                    st.warning(f"An error occurred while inserting into 'comments_details': {str(e)}")
 
     # Function to insert data into the 'playlist_details' table
     def insert_into_playlist_details():
@@ -446,11 +444,8 @@ with tab3:
                     cursor.execute(query4, data_tuple)
                     mydb.commit()
                 except Exception as e:
-                    if "Duplicate entry" in str(e):
-                        st.write("Duplicate entry: The data for this channel already exists in the database.")
 
-                    else:
-                        st.warning(f"An error occurred while inserting into 'playlist_details': {str(e)}")
+                    st.warning(f"An error occurred while inserting into 'playlist_details': {str(e)}")
 
     if st.button("Insert into MySQL"):
         try:
