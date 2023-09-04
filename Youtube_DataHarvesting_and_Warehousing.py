@@ -35,7 +35,7 @@ if "current_tab" not in st.session_state:
     st.session_state.current_tab = "Home"
 
 #Connection with API Key
-api_key = "AIzaSyAcBmh-SggHfxcSctshnPOhiQtkpXYQeX4"
+api_key = "AIzaSyAiQ03pHfOlcDvU38WjxOwBB6JwJsEREcw"
 youtube = build("youtube", "v3", developerKey = api_key)
 
 #Function to get Channel details
@@ -196,10 +196,10 @@ def playlist(youtube, channel_id):
             )
             response=request.execute()
             for i in range(len(response['items'])):
-                data =dict(Playlist_id=response['items'][i]['id'],
-                           Channel_id=response['items'][i]['snippet']['channelId'],
-                           Playlist_count=response['items'][i]['contentDetails']['itemCount'],
-                           Playlist_title=response['items'][i]['snippet']['localized']['title'],
+                data =dict(playlist_id=response['items'][i]['id'],
+                           channel_id=response['items'][i]['snippet']['channelId'],
+                           playlist_count=response['items'][i]['contentDetails']['itemCount'],
+                           playlist_title=response['items'][i]['snippet']['localized']['title'],
                            Playlist_publishedate=response['items'][i]['snippet']['publishedAt'])
                 playlist.append(data)
             next_page_token= response.get('nextPageToken')
@@ -245,7 +245,7 @@ with tab2:
     if channel_id and Get_data:
         ch_details = get_channel_details(youtube, channel_id)
         if ch_details:
-            st.write(":green[Channel Name is]   " + ch_details[0]["channel_name"])
+            st.write(":green[Channel Name is]     " + ch_details[0]["channel_name"])
             st.table(ch_details)
         else:
             st.write(":warning: Channel details not found.")
@@ -269,7 +269,7 @@ with tab2:
                 collections1.insert_many(ch_details)
                 st.success("Channel details uploaded to MogoDB !!")
 
-            collections2 = db.video_details
+            collections2 = db.video_detailscollection
             # Check if video details already exist in the collection
             existing_video = collections2.find_one({"video_id": video_details[0]["video_id"]})
             if existing_video:
@@ -288,19 +288,43 @@ with tab2:
                 st.success("Comment details uploaded to MogoDB !!")
 
             collections4 = db.playlist_details
-            # Check if comment details already exist in the collection
-            existing_playlist = collections4.find_one({"channel_id": playlist_details[0]["channel_id"]})
-            if existing_playlist:
-                st.warning("Playlist details already exist in MongoDB.")
-            else:
-                collections4.insert_many(playlist_details)
-                st.success("Playlist details uploaded to MogoDB !!")
+            existing_playlist_ids = set([playlist["playlist_id"] for playlist in collections4.find()])
 
-            st.success("Upload to MogoDB successful !!")
+            # Check if playlist details exist in the collection
+            if not playlist_details:
+                st.warning("No playlist details to upload to MongoDB.")
+            else:
+                uploaded = False
+                for i in playlist_details:
+                    if i["playlist_id"] not in existing_playlist_ids:
+                        try:
+                            playlist_publishedate_str = i["playlist_publishedate"]
+                            playlist_publishedate = datetime.strptime(playlist_publishedate_str, "%Y-%m-%dT%H:%M:%SZ")
+                            Playlist_count = int(i["playlist_count"])
+
+                            data_tuple = (
+                                          i["playlist_id"],
+                                          i["channel_id"],
+                                          i["playlist_title"],
+                                          Playlist_count,
+                                          playlist_publishedate
+                                          )
+
+                            collections4.insert_one(i)
+                            uploaded = True
+                        except Exception as e:
+                            st.warning(f"An error occurred while inserting into 'playlist_details': {str(e)}")
+
+            if uploaded:
+                st.success("Playlist details uploaded to MongoDB !!")
+            else:
+                st.warning("All playlist details already exist in MongoDB.")
+        st.success("Upload to MongoDB successful !!")
 with tab3:
     st.markdown("### Select a channel to begin Transformation to SQL")
     ch_names = channel_names()
     user_input = st.selectbox("Select channel", options=ch_names)
+    st.write(f"Selected channel: {user_input}")
 
 
     def insert_into_channels_details():
@@ -344,6 +368,7 @@ with tab3:
                 st.write("Duplicate entry: The data for this channel already exists in the channels_details table.")
             else:
                 st.warning(f"An error occurred while inserting into 'channels_details': {str(e)}")
+        st.success("Insertion into channels_details completed.")
 
 
     # Function to insert data into the 'videos_details' table
@@ -356,7 +381,7 @@ with tab3:
                 favorite_count, definition, caption_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
 
         for i in collections2.find({"channel_name": user_input}, {"_id": 0}):
-            
+
             published_date = datetime.strptime(i["published_date"], "%Y-%m-%dT%H:%M:%SZ")
 
             # Convert the list of tags to a comma-separated string
@@ -384,6 +409,7 @@ with tab3:
             except Exception as e:
 
                 st.warning(f"An error occurred while inserting into 'videos_details': {str(e)}")
+        st.success("Insertion into videos_details completed.")
 
     # Function to insert data into the 'comments_details' table
     def insert_into_comments_details():
@@ -414,6 +440,8 @@ with tab3:
                 except Exception as e:
 
                     st.warning(f"An error occurred while inserting into 'comments_details': {str(e)}")
+        st.success("Insertion into comments_details completed.")
+
 
     # Function to insert data into the 'playlist_details' table
     def insert_into_playlist_details():
@@ -424,10 +452,13 @@ with tab3:
                 playlist_count, playlist_publishedate
             ) VALUES (%s, %s, %s, %s, %s)
         """
-        for i in collections4.find({}, {"_id": 0, "channel_id": 1}):
-            Channel_id = i["channel_id"]
-
-            for i in collections4.find({"channel_id": Channel_id }, {"_id": 0}):
+        # Check if playlist_details exist in MongoDB
+        if collections4.count_documents({}) == 0:
+            st.warning("No playlist details found in MongoDB.")
+            return
+        for i in collections4.find({}, {"_id": 0}):
+            if "channel_id" in i:
+                Channel_id = i["channel_id"]
                 try:
                     playlist_publishedate_str = i["playlist_publishedate"]
                     playlist_publishedate = datetime.strptime(playlist_publishedate_str, "%Y-%m-%dT%H:%M:%SZ")
@@ -446,18 +477,20 @@ with tab3:
                 except Exception as e:
 
                     st.warning(f"An error occurred while inserting into 'playlist_details': {str(e)}")
+            else:
+                st.warning("Missing 'channel_id' in playlist_details.")
+
+        st.success("Insertion into playlist_details completed.")
+
 
     if st.button("Insert into MySQL"):
-        try:
+        insert_into_channels_details()
+        insert_into_videos_details()
+        insert_into_comments_details()
+        insert_into_playlist_details()
 
-            insert_into_channels_details()
-            insert_into_videos_details()
-            insert_into_comments_details()
-            insert_into_playlist_details()
+        st.success("Transformation to MySQL Successful!!!")
 
-            st.success("Transformation to MySQL Successful!!!")
-        except Exception as e:
-            st.warning(f"An error occurred: {str(e)}")
 
 with tab4:
     # MYSQL Queries page
