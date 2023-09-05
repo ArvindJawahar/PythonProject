@@ -245,7 +245,7 @@ with tab2:
     if channel_id and Get_data:
         ch_details = get_channel_details(youtube, channel_id)
         if ch_details:
-            st.write(":green[Channel Name is]     " + ch_details[0]["channel_name"])
+            st.success(":blue[Channel Name :] "  +  ch_details[0]["channel_name"])
             st.table(ch_details)
         else:
             st.write(":warning: Channel details not found.")
@@ -269,7 +269,7 @@ with tab2:
                 collections1.insert_many(ch_details)
                 st.success("Channel details uploaded to MogoDB !!")
 
-            collections2 = db.video_detailscollection
+            collections2 = db.video_details
             # Check if video details already exist in the collection
             existing_video = collections2.find_one({"video_id": video_details[0]["video_id"]})
             if existing_video:
