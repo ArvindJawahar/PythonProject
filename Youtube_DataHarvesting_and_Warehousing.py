@@ -158,7 +158,7 @@ def get_comments_details(youtube, v):
 
         except Exception as e:
 
-            print(f"An error occurred while fetching comments: {str(e)}")
+            st.warning(f"An error occurred while fetching comments: {str(e)}")
 
             continue  # Skip this video and proceed with the next one
     return all_comments
@@ -230,14 +230,12 @@ def channel_names():
 
 
 #Streamlit Setup
-
 with tab1:
     st.header(":blue[Project Title:]")
     st.subheader("YouTube Data Harvesting and Warehousing using SQL, MongoDB and Streamlit")
     st.header(":blue[Skills learned from This Project]")
     st.subheader("Python scripting, Data Collection,MongoDB, Streamlit, API integration, Data Managment using MongoDB (Atlas) and SQL")
-    st.header(":blue[DOMAIN - SOCIAL MEDIA]")
-
+    st.header(":blue[DOMAIN] - :green[SOCIAL MEDIA]")
 with tab2:
     channel_id = st.text_input("Enter Channel ID below:")
     Get_data = st.button("Submit")
@@ -289,37 +287,36 @@ with tab2:
 
             collections4 = db.playlist_details
             existing_playlist_ids = set([playlist["playlist_id"] for playlist in collections4.find()])
-
+            uploaded = False
             # Check if playlist details exist in the collection
-            if not playlist_details:
-                st.warning("No playlist details to upload to MongoDB.")
-            else:
-                uploaded = False
-                for i in playlist_details:
-                    if i["playlist_id"] not in existing_playlist_ids:
-                        try:
-                            playlist_publishedate_str = i["playlist_publishedate"]
-                            playlist_publishedate = datetime.strptime(playlist_publishedate_str, "%Y-%m-%dT%H:%M:%SZ")
-                            Playlist_count = int(i["playlist_count"])
+            for i in playlist_details:
+                if i["playlist_id"] not in existing_playlist_ids:
+                    try:
+                        playlist_publishedate_str = i["playlist_publishedate"]
+                        playlist_publishedate = datetime.strptime(playlist_publishedate_str, "%Y-%m-%dT%H:%M:%SZ")
+                        Playlist_count = int(i["playlist_count"])
 
-                            data_tuple = (
-                                          i["playlist_id"],
-                                          i["channel_id"],
-                                          i["playlist_title"],
-                                          Playlist_count,
-                                          playlist_publishedate
-                                          )
+                        data_tuple = (
+                                      i["playlist_id"],
+                                      i["channel_id"],
+                                      i["playlist_title"],
+                                      Playlist_count,
+                                      playlist_publishedate
+                                      )
 
-                            collections4.insert_one(i)
-                            uploaded = True
-                        except Exception as e:
-                            st.warning(f"An error occurred while inserting into 'playlist_details': {str(e)}")
+                        collections4.insert_one(i)
+                        uploaded = True
+                    except Exception as e:
+                        st.warning(f"An error occurred while inserting into 'playlist_details': {str(e)}")
 
             if uploaded:
                 st.success("Playlist details uploaded to MongoDB !!")
+            elif not playlist_details:
+                st.warning("No playlist details to upload to MongoDB.")
             else:
-                st.warning("All playlist details already exist in MongoDB.")
+                st.warning("Playlist details already exist in MongoDB.")
         st.success("Upload to MongoDB successful !!")
+
 with tab3:
     st.markdown("### Select a channel to begin Transformation to SQL")
     ch_names = channel_names()
@@ -327,10 +324,11 @@ with tab3:
     st.write(f"Selected channel: {user_input}")
 
 
+    # Function to insert data into the 'channels_details' table
     def insert_into_channels_details():
         collections1 = db.channel_details
 
-        query1= """
+        query1 = """
             INSERT INTO channels_details (channel_id, channel_name, channel_playlistid, subscribers, views, total_videos, description, country, published_at)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
@@ -363,12 +361,9 @@ with tab3:
         try:
             cursor.execute(query1, data_tuple)
             mydb.commit()
-        except Exception as e:
-            if "Duplicate entry" in str(e):
-                st.write("Duplicate entry: The data for this channel already exists in the channels_details table.")
-            else:
-                st.warning(f"An error occurred while inserting into 'channels_details': {str(e)}")
-        st.success("Insertion into channels_details completed.")
+        except:
+
+            st.success("Insertion into channels_details completed.")
 
 
     # Function to insert data into the 'videos_details' table
@@ -411,6 +406,7 @@ with tab3:
                 st.warning(f"An error occurred while inserting into 'videos_details': {str(e)}")
         st.success("Insertion into videos_details completed.")
 
+
     # Function to insert data into the 'comments_details' table
     def insert_into_comments_details():
         collections2 = db.video_details
@@ -452,21 +448,40 @@ with tab3:
                 playlist_count, playlist_publishedate
             ) VALUES (%s, %s, %s, %s, %s)
         """
-        # Check if playlist_details exist in MongoDB
-        if collections4.count_documents({}) == 0:
-            st.warning("No playlist details found in MongoDB.")
-            return
-        for i in collections4.find({}, {"_id": 0}):
-            if "channel_id" in i:
-                Channel_id = i["channel_id"]
-                try:
-                    playlist_publishedate_str = i["playlist_publishedate"]
-                    playlist_publishedate = datetime.strptime(playlist_publishedate_str, "%Y-%m-%dT%H:%M:%SZ")
-                    Playlist_count = int(i["playlist_count"])
 
+        # Fetch the channel_id for the specified channel_name
+        channel_info = db.channel_details.find_one({"channel_name": user_input}, {"channel_id": 1, "_id": 0})
+
+        if not channel_info:
+            st.warning(f"No channel found in MongoDB for channel_name: {user_input}.")
+            return
+
+        channel_id = channel_info.get("channel_id", "")
+
+        # Check if playlist_details exist in MongoDB for the specified channel
+        if collections4.count_documents({"channel_id": channel_id}) == 0:
+            st.warning(f"No playlist details found in MongoDB for channel_id: {channel_id}.")
+            return
+
+        # Fetch playlist details only for the specified channel
+        playlist_cursor = collections4.find({"channel_id": channel_id}, {"_id": 0})
+
+        duplicate_entries = []
+
+        for i in playlist_cursor:
+            try:
+                playlist_publishedate_str = i["playlist_publishedate"]
+                playlist_publishedate = datetime.strptime(playlist_publishedate_str, "%Y-%m-%dT%H:%M:%SZ")
+                Playlist_count = int(i["playlist_count"])
+
+                # Check if the data already exists in MySQL
+                cursor.execute("SELECT * FROM playlist_details WHERE playlist_id = %s", (i["playlist_id"],))
+                existing_data = cursor.fetchone()
+
+                if not existing_data:
                     data_tuple = (
                         i["playlist_id"],
-                        i["channel_id"],
+                        channel_id,
                         i["playlist_title"],
                         Playlist_count,
                         playlist_publishedate
@@ -474,13 +489,14 @@ with tab3:
 
                     cursor.execute(query4, data_tuple)
                     mydb.commit()
-                except Exception as e:
+                else:
+                    duplicate_entries.append(i["playlist_id"])
+            except Exception as e:
+                st.warning(f"An error occurred while inserting into 'playlist_details': {str(e)}")
+        if duplicate_entries:
+            st.warning("Duplicate entry: playlist_details already exists in MySQL.")
 
-                    st.warning(f"An error occurred while inserting into 'playlist_details': {str(e)}")
-            else:
-                st.warning("Missing 'channel_id' in playlist_details.")
-
-        st.success("Insertion into playlist_details completed.")
+        st.success(f"Insertion into playlist_details for channel_name: {user_input} completed.")
 
 
     if st.button("Insert into MySQL"):
