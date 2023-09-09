@@ -10,17 +10,17 @@ import isodate
 
 
 #Connecting to MongoDB Atlas
-uri = "mongodb+srv://<username>:<password>@cluster0.ooan6hu.mongodb.net/?retryWrites=true&w=majority"
+uri = "mongodb+srv://arvindjawahar:hIk8CxRARz1USGVT@cluster0.ooan6hu.mongodb.net/?retryWrites=true&w=majority"
 myclient = MongoClient(uri, server_api=ServerApi('1'))
 db = myclient["youtube_DB"]
 information = db.youtube_DB
 
 #Connecting with MySQL DataBase
-db_url = "mysql+mysqlconnector://root:<password>@localhost:3306/youtube_data"
+db_url = "mysql+mysqlconnector://root:Qwerty@09876@localhost:3306/youtube_data"
 engine = create_engine(db_url)
 mydb = sql.connect(host="127.0.0.1",
                   user="root",
-                  password="<password>",
+                  password="Qwerty@09876",
                   database="youtube_data")
 cursor = mydb.cursor()
 
@@ -35,7 +35,7 @@ if "current_tab" not in st.session_state:
     st.session_state.current_tab = "Home"
 
 #Connection with API Key
-api_key = "<apikey>"
+api_key = "AIzaSyAhIMy6WaddYBdC60SN1tN0wrNYcAGsYm0"
 youtube = build("youtube", "v3", developerKey = api_key)
 
 #Function to get Channel details
@@ -115,6 +115,12 @@ def get_video_details(youtube, video_ids):
 
         if 'items' in response:
             for video in response["items"]:
+                duration_iso = video.get('contentDetails', {}).get('duration')
+                if duration_iso:
+                    duration_obj = isodate.parse_duration(duration_iso)
+                    video_duration = str(duration_obj)
+                else:
+                    video_duration = None
                 video_stats = dict(channel_name = video['snippet']['channelTitle'],
                                    channel_id = video['snippet']['channelId'],
                                    video_id = video['id'],
@@ -123,7 +129,7 @@ def get_video_details(youtube, video_ids):
                                    thumbnail = video['snippet']['thumbnails']['default']['url'],
                                    description = video['snippet']['description'],
                                    published_date = video['snippet']['publishedAt'],
-                                   duration=video.get('contentDetails', {}).get('duration', None),
+                                   duration= video_duration,
                                    views = video['statistics']['viewCount'],
                                    likes = video['statistics'].get('likeCount', 0),
                                    comments = video['statistics'].get('commentCount', 0),
@@ -212,12 +218,12 @@ def main(channel_id):
    playlist_details = playlist(youtube,channel_id) #playlist_details
    video_ids = get_video_ids(youtube, CD[0]['channel_playlistid']) #video_ids details
    video_details = get_video_details(youtube, video_ids)  # get_video_details
-   comment_details = get_comments_details(youtube, video_ids)  # get_comments_in_video
+   comments_details = get_comments_details(youtube, video_ids)  # get_comments_in_video
 
    data = {"Channel_Details": CD,
            "Playlist_Details": playlist_details,
            "Video_Details": video_details,
-           "Comments_Details": comment_details}
+           "Comments_Details": comments_details}
    return data
 
 # FUNCTION TO GET CHANNEL NAMES FROM MONGODB
@@ -256,7 +262,7 @@ with tab2:
             playlist_details = playlist(youtube, channel_id)  # playlist_details
             video_ids = get_video_ids(youtube, ch_details[0]['channel_playlistid'])  # video_ids details
             video_details = get_video_details(youtube, video_ids)  # get_video_details
-            comment_details = get_comments_details(youtube, video_ids)
+            comments_details = get_comments_details(youtube, video_ids)
 
             collections1 = db.channel_details
             # Check if channel details already exist in the collection
@@ -278,11 +284,11 @@ with tab2:
 
             collections3 = db.comments_details
             # Check if comment details already exist in the collection
-            existing_comment = collections3.find_one({"video_id": comment_details[0]["video_id"]})
+            existing_comment = collections3.find_one({"comment_id": comments_details[0]["comment_id"]})
             if existing_comment:
                 st.warning("Comment details already exist in MongoDB.")
             else:
-                collections3.insert_many(comment_details)
+                collections3.insert_many(comments_details)
                 st.success("Comment details uploaded to MogoDB !!")
 
             collections4 = db.playlist_details
@@ -293,7 +299,16 @@ with tab2:
                 if i["playlist_id"] not in existing_playlist_ids:
                     try:
                         playlist_publishedate_str = i["playlist_publishedate"]
-                        playlist_publishedate = datetime.strptime(playlist_publishedate_str, "%Y-%m-%dT%H:%M:%SZ")
+
+                        # Step 5: Verify Data Types
+                        print(f"Playlist Published Date String: {playlist_publishedate_str}")
+
+                        if "." in playlist_publishedate_str:
+                            datetime_format = "%Y-%m-%dT%H:%M:%S.%fZ"
+                        else:
+                            datetime_format = "%Y-%m-%dT%H:%M:%SZ"
+
+                        playlist_publishedate = datetime.datetime.strptime(playlist_publishedate_str, datetime_format)
                         Playlist_count = int(i["playlist_count"])
 
                         data_tuple = (
@@ -303,6 +318,9 @@ with tab2:
                                       Playlist_count,
                                       playlist_publishedate
                                       )
+
+                        # Step 6: Verify Data Types
+                        print(f"Playlist Published Date Type: {type(playlist_publishedate)}")
 
                         collections4.insert_one(i)
                         uploaded = True
@@ -319,9 +337,10 @@ with tab2:
 
 with tab3:
     st.markdown("### Select a channel to begin Transformation to SQL")
-    ch_names = channel_names()
+    ch_names = ["Select a Channel"] + channel_names()
     user_input = st.selectbox("Select channel", options=ch_names)
-    st.write(f"Selected channel: {user_input}")
+    if user_input!= "Select a Channel":
+        st.write(f"Selected channel: :red[{user_input}]")
 
 
     # Function to insert data into the 'channels_details' table
@@ -346,24 +365,34 @@ with tab3:
                 datetime_format = "%Y-%m-%dT%H:%M:%S.%fZ"
             else:
                 datetime_format = "%Y-%m-%dT%H:%M:%SZ"
+            duplicate_entries = []
+            try:
+                published_at = datetime.strptime(published_at_iso, datetime_format)
 
-            published_at = datetime.strptime(published_at_iso, datetime_format)
+                # Check if the data already exists in MySQL
+                cursor.execute("SELECT * FROM channels_details WHERE channel_id = %s", (i["channel_id"],))
+                existing_data = cursor.fetchone()
 
-            data_tuple = (i["channel_id"],
-                          i["channel_name"],
-                          i["channel_playlistid"],
-                          subscribers,
-                          views,
-                          total_videos,
-                          i["description"],
-                          i["country"],
-                          published_at)
-        try:
-            cursor.execute(query1, data_tuple)
-            mydb.commit()
-        except:
-
-            st.success("Insertion into channels_details completed.")
+                if not existing_data:
+                    data_tuple = (i["channel_id"],
+                                  i["channel_name"],
+                                  i["channel_playlistid"],
+                                  subscribers,
+                                  views,
+                                  total_videos,
+                                  i["description"],
+                                  i["country"],
+                                  published_at)
+                    cursor.execute(query1, data_tuple)
+                    mydb.commit()
+                else:
+                    duplicate_entries.append(i["channel_id"])
+            except Exception as e:
+                st.warning(f"An error occurred while inserting into 'channels_details': {str(e)}")
+        if duplicate_entries:
+            st.warning("Duplicate entry: channels_details already exists in MySQL.")
+        else:
+          st.success(f"Insertion into channels_details for channel_name: :blue[{user_input}] completed.")
 
 
     # Function to insert data into the 'videos_details' table
@@ -375,36 +404,47 @@ with tab3:
                 description, published_date, duration, views, likes, comments,
                 favorite_count, definition, caption_status) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
 
+        duplicate_entries = []
         for i in collections2.find({"channel_name": user_input}, {"_id": 0}):
-
-            published_date = datetime.strptime(i["published_date"], "%Y-%m-%dT%H:%M:%SZ")
-
-            # Convert the list of tags to a comma-separated string
-            tags = ','.join(i["tags"]) if i["tags"] else None
-            data_tuple = (
-                i["channel_name"],
-                i["channel_id"],
-                i["video_id"],
-                i["title"],
-                tags,
-                i["thumbnail"],
-                i["description"],
-                published_date,
-                i["duration"],
-                int(i["views"]),
-                int(i["likes"]),
-                int(i["comments"]),
-                int(i["favorite_count"]),
-                i["definition"],
-                i["caption_status"]
-            )
             try:
-                cursor.execute(query2, data_tuple)
-                mydb.commit()
-            except Exception as e:
+                published_date = datetime.strptime(i["published_date"], "%Y-%m-%dT%H:%M:%SZ")
 
+                # Convert the list of tags to a comma-separated string
+                tags = ','.join(i["tags"]) if i["tags"] else None
+
+                # Check if the data already exists in MySQL
+                cursor.execute("SELECT * FROM videos_details WHERE video_id = %s", (i["video_id"],))
+                existing_data = cursor.fetchone()
+
+                if not existing_data:
+                    data_tuple = (
+                                    i["channel_name"],
+                                    i["channel_id"],
+                                    i["video_id"],
+                                    i["title"],
+                                    tags,
+                                    i["thumbnail"],
+                                    i["description"],
+                                    published_date,
+                                    i["duration"],
+                                    int(i["views"]),
+                                    int(i["likes"]),
+                                    int(i["comments"]),
+                                    int(i["favorite_count"]),
+                                    i["definition"],
+                                    i["caption_status"]
+                                    )
+
+                    cursor.execute(query2, data_tuple)
+                    mydb.commit()
+                else:
+                    duplicate_entries.append(i["video_id"])
+            except Exception as e:
                 st.warning(f"An error occurred while inserting into 'videos_details': {str(e)}")
-        st.success("Insertion into videos_details completed.")
+        if duplicate_entries:
+            st.warning("Duplicate entry: videos_details already exists in MySQL.")
+        else:
+            st.success(f"Insertion into videos_details for channel_name: :blue[{user_input}] completed.")
 
 
     # Function to insert data into the 'comments_details' table
@@ -417,26 +457,35 @@ with tab3:
             ) VALUES (%s, %s, %s, %s, %s)
         """
         video_ids = [vid["video_id"] for vid in collections2.find({"channel_name": user_input}, {"_id": 0})]
-
+        duplicate_entries = []
         for video_id in video_ids:
 
             for i in collections3.find({'video_id': video_id}, {'_id': 0}):
                 try:
                     comment_publishedAt = datetime.strptime(i["comment_publishedAt"], "%Y-%m-%dT%H:%M:%SZ")
 
-                    data_tuple = (
-                        i["comment_id"],
-                        i["video_id"],
-                        i["comment_text"],
-                        i["comment_author"],
-                        comment_publishedAt
-                    )
-                    cursor.execute(query3, data_tuple)
-                    mydb.commit()
-                except Exception as e:
+                    # Check if the data already exists in MySQL
+                    cursor.execute("SELECT * FROM comments_details WHERE comment_id = %s", (i["comment_id"],))
+                    existing_data = cursor.fetchone()
 
+                    if not existing_data:
+                        data_tuple = (
+                            i["comment_id"],
+                            i["video_id"],
+                            i["comment_text"],
+                            i["comment_author"],
+                            comment_publishedAt
+                        )
+                        cursor.execute(query3, data_tuple)
+                        mydb.commit()
+                    else:
+                        duplicate_entries.append(i["comment_id"])
+                except Exception as e:
                     st.warning(f"An error occurred while inserting into 'comments_details': {str(e)}")
-        st.success("Insertion into comments_details completed.")
+        if duplicate_entries:
+            st.warning("Duplicate entry: comments_details already exists in MySQL.")
+        else:
+            st.success(f"Insertion into comments_details for channel_name: :blue[{user_input}] completed.")
 
 
     # Function to insert data into the 'playlist_details' table
@@ -495,17 +544,18 @@ with tab3:
                 st.warning(f"An error occurred while inserting into 'playlist_details': {str(e)}")
         if duplicate_entries:
             st.warning("Duplicate entry: playlist_details already exists in MySQL.")
-
-        st.success(f"Insertion into playlist_details for channel_name: {user_input} completed.")
+        else:
+            st.success(f"Insertion into playlist_details for channel_name: :blue[{user_input}] completed.")
 
 
     if st.button("Insert into MySQL"):
-        insert_into_channels_details()
-        insert_into_videos_details()
-        insert_into_comments_details()
-        insert_into_playlist_details()
+        with st.spinner("Inserting, please wait..."):
+            insert_into_channels_details()
+            insert_into_videos_details()
+            insert_into_comments_details()
+            insert_into_playlist_details()
 
-        st.success("Transformation to MySQL Successful!!!")
+            st.success("Transformation to MySQL Successful!!!")
 
 
 with tab4:
