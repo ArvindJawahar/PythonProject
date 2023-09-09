@@ -322,7 +322,7 @@ with tab2:
                         # Step 6: Verify Data Types
                         print(f"Playlist Published Date Type: {type(playlist_publishedate)}")
 
-                        collections4.insert_one(i)
+                        collections4.insert_one(data_tuple)
                         uploaded = True
                     except Exception as e:
                         st.warning(f"An error occurred while inserting into 'playlist_details': {str(e)}")
