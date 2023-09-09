@@ -665,7 +665,7 @@ with tab4:
         #9 question
         elif questions=='9. What is the average duration of all videos in each channel, and what are their corresponding channel names?':
             if st.button('Get solution'):
-                cursor.execute("SELECT channel_name AS Channe_Name, AVG(TIME_TO_SEC(duration))/60 AS Average_Video_Duration FROM videos_details GROUP BY channel_name ORDER BY AVG(TIME_TO_SEC(duration))/60 DESC")
+                cursor.execute("SELECT channel_name AS Channel_Name, AVG(TIME_TO_SEC(duration))/60 AS Average_Video_Duration FROM videos_details GROUP BY channel_name ORDER BY AVG(TIME_TO_SEC(duration))/60 DESC")
                 df = pd.DataFrame(cursor.fetchall(), columns=cursor.column_names)
                 st.write(df)
                 st.success("DONE", icon="✅")
