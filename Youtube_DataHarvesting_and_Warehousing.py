@@ -10,17 +10,17 @@ import isodate
 
 
 #Connecting to MongoDB Atlas
-uri = "mongodb+srv://arvindjawahar:hIk8CxRARz1USGVT@cluster0.ooan6hu.mongodb.net/?retryWrites=true&w=majority"
+uri = "mongodb+srv://<username>:<password>@cluster0.ooan6hu.mongodb.net/?retryWrites=true&w=majority"
 myclient = MongoClient(uri, server_api=ServerApi('1'))
 db = myclient["youtube_DB"]
 information = db.youtube_DB
 
 #Connecting with MySQL DataBase
-db_url = "mysql+mysqlconnector://root:Qwerty@09876@localhost:3306/youtube_data"
+db_url = "mysql+mysqlconnector://root:<password>@localhost:3306/youtube_data"
 engine = create_engine(db_url)
 mydb = sql.connect(host="127.0.0.1",
                   user="root",
-                  password="Qwerty@09876",
+                  password="<password>",
                   database="youtube_data")
 cursor = mydb.cursor()
 
@@ -35,7 +35,7 @@ if "current_tab" not in st.session_state:
     st.session_state.current_tab = "Home"
 
 #Connection with API Key
-api_key = "AIzaSyAhIMy6WaddYBdC60SN1tN0wrNYcAGsYm0"
+api_key = "<api_key>"
 youtube = build("youtube", "v3", developerKey = api_key)
 
 #Function to get Channel details
